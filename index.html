@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="FB Radar">
-  <link rel="stylesheet" href="styles.css?v=32">
+  <link rel="stylesheet" href="styles.css?v=1">
 </head>
 <body>
   <header class="topo">
@@ -60,6 +60,16 @@
       <p class="dica">O PC avisa cada anúncio novo das cidades escolhidas (precisa do PC ligado com o Chrome aberto).</p>
     </section>
 
+    <section id="secGist" hidden>
+      <h3>☁️ Gist do FB Radar</h3>
+      <p class="dica">Por onde o PC manda os anúncios e os avisos para o celular. Cole um token do GitHub só com a
+        permissão <strong>gist</strong> (<a href="https://github.com/settings/tokens/new?description=FB%20Radar%20(Gist)&scopes=gist" target="_blank" rel="noopener">gerar token</a>).
+        Se já existir um Gist do FB Radar na conta, ele é reaproveitado.</p>
+      <p id="gistStatus" class="dica"></p>
+      <input id="tokenGist" type="password" placeholder="ghp_… ou github_pat_…" autocomplete="off">
+      <div class="botoes"><button id="btnSalvarGist" type="button" class="primario">Conectar Gist</button></div>
+    </section>
+
     <section id="secCidades" hidden>
       <h3>📍 Cidades</h3>
       <p class="dica">Só entram anúncios destas cidades (uma por linha). Vazio = todas as que o Facebook mostrar.</p>
@@ -88,7 +98,7 @@
 
     <section>
       <h3>🧩 Coletor (no PC)</h3>
-      <p class="dica">A extensão <strong>FB Radar Coletor</strong> (pasta <code>fb/coletor</code>) roda no Chrome do PC, logado no
+      <p class="dica">A extensão <strong>FB Radar Coletor</strong> (pasta <code>coletor</code>) roda no Chrome do PC, logado no
         Facebook, e confere a categoria <em>Consoles de Video Game</em> a cada poucos minutos. Ligue pelo ícone dela (▶ Iniciar).</p>
       <p id="versao" class="dica"></p>
     </section>
@@ -96,8 +106,8 @@
 
   <div id="toast" class="toast" role="status" hidden></div>
 
-  <script src="../config.js?v=32"></script>
-  <script src="../sync.js?v=32"></script>
-  <script src="app.js?v=32"></script>
+  <script src="config.js?v=1"></script>
+  <script src="sync.js?v=1"></script>
+  <script src="app.js?v=1"></script>
 </body>
 </html>

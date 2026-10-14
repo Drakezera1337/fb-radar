@@ -2,7 +2,7 @@
 //
 // Os dados vêm do PC: a extensão FB Radar Coletor lê a categoria e o server.py guarda (fb_estado.json).
 // No PC (localhost) o app lê direto do server.py (/api/fb/estado); fora dele (GitHub Pages, celular),
-// lê o fb.json que o server.py publica no Gist do Rastreazera. Favoritos, ocultos e "já vi" ficam
+// lê o fb.json que o server.py publica no Gist do FB Radar. Favoritos, ocultos e "já vi" ficam
 // só neste aparelho (localStorage).
 const $ = (sel) => document.querySelector(sel);
 const NO_PC = ['localhost', '127.0.0.1'].includes(location.hostname);
@@ -92,6 +92,7 @@ async function carregar({ manual = false } = {}) {
       novo = await res.json();
     } else if (Sync.enabled()) {
       novo = await Sync.lerUm('fb.json');
+      if (novo && !novo.anuncios) novo = null; // Gist recém-criado, o PC ainda não publicou
       if (!novo) throw new Error('o PC ainda não publicou anúncios (o FB Radar Coletor está ligado?)');
     } else {
       novo = null;
@@ -264,7 +265,7 @@ function render() {
         <button type="button" id="btnConectarVazio" class="primario">Conectar</button>`;
     } else if (!total) {
       vazio.innerHTML = `<span class="grande">📡</span><p>Nenhum anúncio ainda.</p>
-        <p class="dica">Instale a extensão <strong>FB Radar Coletor</strong> no Chrome do PC (pasta <code>fb/coletor</code>), entre no Facebook e clique em ▶ Iniciar.</p>`;
+        <p class="dica">Instale a extensão <strong>FB Radar Coletor</strong> no Chrome do PC (pasta <code>coletor</code> deste projeto), entre no Facebook e clique em ▶ Iniciar.</p>`;
     } else {
       vazio.innerHTML = `<span class="grande">🔍</span><p>Nada com esse filtro.</p>`;
     }
@@ -317,10 +318,12 @@ setInterval(() => { if (!document.hidden) render(); }, 60000); // "há X min"
 const dlg = $('#dlgConfig');
 function abrirConfig() {
   $('#secCidades').hidden = !NO_PC;
+  $('#secGist').hidden = !NO_PC;
+  renderGist();
   $('#secQr').hidden = !NO_PC;
   $('#secConectar').hidden = NO_PC;
   if (NO_PC) $('#cidades').value = (dados?.cidades || []).join('\n');
-  $('#versao').textContent = `Versão ${typeof RZ_VERSAO === 'number' ? RZ_VERSAO : '?'}${NO_PC ? ' · no PC' : ''}`;
+  $('#versao').textContent = `Versão ${typeof FB_VERSAO === 'number' ? FB_VERSAO : '?'}${NO_PC ? ' · no PC' : ''}`;
   renderNotif();
   dlg.showModal();
 }
@@ -339,7 +342,35 @@ $('#btnSalvarCidades').addEventListener('click', async () => {
   }
 });
 
-// ---------- Notificações (push enviado pelo server.py do PC; inscrição em push_fb.json no Gist) ----------
+// ---------- Gist do FB Radar (no PC): o app guarda e passa ao server.py, que publica nele ----------
+function renderGist() {
+  const { gistId } = Sync.config();
+  $('#gistStatus').textContent = gistId
+    ? `✅ Conectado ao Gist ${gistId.slice(0, 8)}…${dados?.gistConfigurado === false ? ' (o server.py ainda não recebeu — clique em Conectar de novo)' : ''}`
+    : 'Nenhum Gist conectado: o celular não recebe anúncios nem avisos.';
+}
+
+async function enviarGistAoServidor(gist) {
+  const res = await fetch('/api/fb/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gist }) });
+  if (!res.ok) throw new Error(`server.py respondeu ${res.status}`);
+}
+
+$('#btnSalvarGist').addEventListener('click', async () => {
+  const token = $('#tokenGist').value.trim();
+  if (!token) return toast('Cole o token do GitHub');
+  try {
+    const { gistId, criado } = await Sync.conectar(token);
+    await enviarGistAoServidor({ token, gistId });
+    $('#tokenGist').value = '';
+    toast(criado ? 'Gist do FB Radar criado e conectado' : 'Gist do FB Radar conectado');
+    await carregar();
+  } catch (err) {
+    toast(`Não foi possível conectar: ${err.message}`);
+  }
+  renderGist();
+});
+
+// ---------- Notificações (push enviado pelo server.py do PC; inscrição em push.json no Gist do FB Radar) ----------
 function pushSuportado() {
   return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 }
@@ -366,17 +397,17 @@ function renderNotif() {
 }
 
 $('#btnAtivarPush').addEventListener('click', async () => {
-  if (!Sync.enabled()) return toast(NO_PC ? 'Ative a sincronização no Rastreazera (⚙️) primeiro' : 'Conecte ao PC primeiro (Ler QR do PC)');
+  if (!Sync.enabled()) return toast(NO_PC ? 'Conecte o Gist do FB Radar primeiro (⚙️ → Gist)' : 'Conecte ao PC primeiro (Ler QR do PC)');
   const permissao = await Notification.requestPermission();
   if (permissao !== 'granted') { renderNotif(); return toast('Sem permissão para notificar'); }
   try {
     const reg = await navigator.serviceWorker.getRegistration('./') || await navigator.serviceWorker.register('sw.js');
     await navigator.serviceWorker.ready;
     const sub = (await reg.pushManager.getSubscription())
-      || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: chaveParaBytes(RZ_CONFIG.pushChavePublica) });
+      || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: chaveParaBytes(FB_CONFIG.pushChavePublica) });
     const { endpoint, keys } = sub.toJSON();
     const registro = { endpoint, keys, aparelho: descreverAparelho(), criadoEm: Date.now() };
-    await Sync.atualizarInscricao(endpoint, registro, 'push_fb.json');
+    await Sync.atualizarInscricao(endpoint, registro);
     gravarJSON(K.push, registro);
     toast('Notificações ativadas neste aparelho');
   } catch (err) {
@@ -389,7 +420,7 @@ $('#btnTestarPush').addEventListener('click', async () => {
   const registro = lerJSON(K.push, null);
   if (!registro) return renderNotif();
   try {
-    await Sync.atualizarInscricao(registro.endpoint, { ...registro, testeEm: Date.now() }, 'push_fb.json');
+    await Sync.atualizarInscricao(registro.endpoint, { ...registro, testeEm: Date.now() });
     toast('Teste pedido ao PC — chega em até 1 min (com o PC ligado)');
   } catch (err) {
     toast(`Não foi possível pedir o teste: ${err.message}`);
@@ -401,14 +432,14 @@ $('#btnDesativarPush').addEventListener('click', async () => {
   try {
     const reg = await navigator.serviceWorker.getRegistration('./');
     await (await reg?.pushManager.getSubscription())?.unsubscribe();
-    if (registro) await Sync.atualizarInscricao(registro.endpoint, null, 'push_fb.json');
+    if (registro) await Sync.atualizarInscricao(registro.endpoint, null);
   } catch { /* segue desligando localmente */ }
   gravarJSON(K.push, null);
   renderNotif();
   toast('Notificações desativadas neste aparelho');
 });
 
-// ---------- Celular: QR code com o token e o Gist (o mesmo do Rastreazera) ----------
+// ---------- Celular: QR code com o token e o Gist do FB Radar ----------
 // O QR abre o FB Radar publicado com #config=…; o fragmento (#) não vai a nenhum servidor e é apagado ao ler.
 function base64url(texto) {
   return btoa(String.fromCharCode(...new TextEncoder().encode(texto))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -431,9 +462,9 @@ let qrScript;
 $('#btnMostrarQr').addEventListener('click', async () => {
   const caixa = $('#qrCodigo');
   if (!caixa.hidden) { caixa.hidden = true; caixa.innerHTML = ''; return; }
-  if (!Sync.enabled()) return toast('Ative a sincronização no Rastreazera (⚙️) primeiro');
+  if (!Sync.enabled()) return toast('Conecte o Gist do FB Radar primeiro (acima)');
   const { token, gistId } = Sync.config();
-  const url = `${RZ_CONFIG.sitePublico}fb/#config=${base64url(JSON.stringify({ token, gistId }))}`;
+  const url = `${FB_CONFIG.sitePublico}#config=${base64url(JSON.stringify({ token, gistId }))}`;
   try {
     qrScript ??= carregarScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js').catch((e) => { qrScript = null; throw e; });
     await qrScript;
