@@ -344,10 +344,18 @@ $('#btnSalvarCidades').addEventListener('click', async () => {
 
 // ---------- Gist do FB Radar (no PC): o app guarda e passa ao server.py, que publica nele ----------
 function renderGist() {
-  const { gistId } = Sync.config();
-  $('#gistStatus').textContent = gistId
-    ? `✅ Conectado ao Gist ${gistId.slice(0, 8)}…${dados?.gistConfigurado === false ? ' (o server.py ainda não recebeu — clique em Conectar de novo)' : ''}`
-    : 'Nenhum Gist conectado: o celular não recebe anúncios nem avisos.';
+  const { gistId, token } = Sync.config();
+  const fimAqui = (token || '').slice(-4);
+  const fimServidor = dados?.gistTokenFim || '';
+  if (!gistId) {
+    $('#gistStatus').textContent = 'Nenhum Gist conectado: o celular não recebe anúncios nem avisos.';
+  } else if (!fimServidor) {
+    $('#gistStatus').textContent = `⚠️ Gist ${gistId.slice(0, 8)}… salvo aqui, mas o server.py ainda não recebeu — clique em Conectar Gist de novo.`;
+  } else if (fimServidor !== fimAqui) {
+    $('#gistStatus').textContent = `⚠️ O server.py está usando outro token (…${fimServidor}) e esta página tem o …${fimAqui}. Cole o token certo e clique em Conectar Gist.`;
+  } else {
+    $('#gistStatus').textContent = `✅ Conectado ao Gist ${gistId.slice(0, 8)}… · token …${fimServidor} (o mesmo no server.py)`;
+  }
 }
 
 async function enviarGistAoServidor(gist) {
