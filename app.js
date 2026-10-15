@@ -110,6 +110,7 @@ async function carregar({ manual = false } = {}) {
     carregando = false;
     $('#btnAtualizar').classList.remove('girando');
     render();
+    retentarFotos();
   }
 }
 
@@ -201,7 +202,7 @@ function cardHtml(a) {
   return `
     <a class="card${novo ? ' e-novo' : ''}${a.vendido ? ' vendido' : ''}" href="${linkAnuncio(a)}" target="_blank" rel="noopener" data-ids="${esc(a.ids.join(','))}">
       <div class="foto">
-        ${a.foto ? `<img src="${esc(a.foto)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'sem-foto',textContent:'🎮'}))">` : '<div class="sem-foto">🎮</div>'}
+        ${a.foto ? `<img src="${esc(a.foto)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="fotoFalhou(this)" onload="this.parentNode.classList.remove('falhou')">` : '<div class="sem-foto">🎮</div>'}
         <div class="selos">${selos}</div>
       </div>
       <div class="acoes">
@@ -216,11 +217,29 @@ function cardHtml(a) {
     </a>`;
 }
 
+// Foto que não carregou (sinal fraco no celular, por exemplo): mostra 🎮 e tenta de novo em 3 s e 15 s;
+// depois disso, a cada atualização dos dados (retentarFotos)
+function fotoFalhou(img) {
+  img.parentNode.classList.add('falhou');
+  const n = Number(img.dataset.tentativas || 0);
+  img.dataset.tentativas = n + 1;
+  if (n < 2) setTimeout(() => recarregarFoto(img), n ? 15000 : 3000);
+}
+function recarregarFoto(img) {
+  const src = img.getAttribute('src');
+  img.removeAttribute('src');
+  img.setAttribute('src', src);
+}
+function retentarFotos() {
+  document.querySelectorAll('.foto.falhou img').forEach(recarregarFoto);
+}
+
 function statusColeta() {
   if (!dados) return { texto: NO_PC ? 'Sem dados ainda' : 'Não conectado', alerta: true };
   const { coleta, agenda } = dados;
   const intervalo = agenda?.intervalo || 3;
-  const limite = (Math.max(intervalo * 3, 10) + (NO_PC ? 0 : 15)) * 60000;
+  // O PC republica o fb.json a cada conferência; fora do PC há uns minutos a mais até o Gist chegar
+  const limite = (Math.max(intervalo * 3, 10) + (NO_PC ? 0 : 5)) * 60000;
   if (!agenda?.ativo) return { texto: '⏸ Coletor parado no PC', alerta: true, aviso: 'O FB Radar Coletor está parado. No Chrome do PC, clique no ícone dele → ▶ Iniciar.' };
   if (!coleta?.em || Date.now() - coleta.em > limite) {
     return { texto: `Sem sinal do PC desde ${coleta?.em ? tempoRelativo(coleta.em).replace('há ', '') : '—'}`, alerta: true,
