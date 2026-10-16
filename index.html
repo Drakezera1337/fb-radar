@@ -11,55 +11,76 @@
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="FB Radar">
-  <link rel="stylesheet" href="styles.css?v=4">
+  <link rel="stylesheet" href="styles.css?v=5">
 </head>
 <body>
   <header class="topo">
     <div class="marca">
       <img src="icon.svg" alt="" width="30" height="30">
       <div>
-        <h1>FB Radar</h1>
+        <h1 id="tituloTela">FB Radar</h1>
         <button id="status" class="status" type="button">Carregando…</button>
       </div>
     </div>
     <div class="topo-acoes">
       <button id="btnAtualizar" class="icone" type="button" title="Atualizar" aria-label="Atualizar">🔄</button>
-      <button id="btnConfig" class="icone" type="button" title="Configurações" aria-label="Configurações">⚙️</button>
     </div>
   </header>
 
-  <div class="ferramentas">
-    <input id="busca" type="search" placeholder="Buscar (ex.: ps4 slim, controle)" autocomplete="off">
-    <select id="ordem" aria-label="Ordenar">
-      <option value="novos">Mais novos</option>
-      <option value="barato">Menor preço</option>
-      <option value="caro">Maior preço</option>
-    </select>
-  </div>
-  <nav id="chips" class="chips" aria-label="Categorias"></nav>
-
   <div id="aviso" class="aviso" hidden></div>
-  <p id="resumo" class="resumo"></p>
-  <main id="lista" class="grade"></main>
-  <div id="vazio" class="vazio" hidden></div>
 
-  <dialog id="dlgConfig">
-    <form method="dialog" class="dlg-topo">
-      <h2>Configurações</h2>
-      <button class="icone" value="fechar" aria-label="Fechar">✕</button>
-    </form>
+  <!-- ===== Anúncios ===== -->
+  <main id="telaAnuncios" class="tela">
+    <div class="ferramentas">
+      <input id="busca" type="search" placeholder="Buscar (ex.: ps4 slim, controle)" autocomplete="off">
+      <select id="ordem" aria-label="Ordenar">
+        <option value="novos">Mais novos</option>
+        <option value="barato">Menor preço</option>
+        <option value="caro">Maior preço</option>
+      </select>
+    </div>
+    <nav id="chips" class="chips" aria-label="Categorias"></nav>
+    <p id="resumo" class="resumo"></p>
+    <div id="lista" class="grade"></div>
+    <div id="vazio" class="vazio" hidden></div>
+  </main>
 
-    <section>
-      <h3>🔔 Notificações neste aparelho</h3>
+  <!-- ===== Notificações ===== -->
+  <section id="telaNotificacoes" class="tela pagina" hidden>
+    <div class="cartao">
+      <h3>🔔 Neste aparelho</h3>
       <p id="notifStatus" class="dica"></p>
       <div class="botoes">
         <button id="btnAtivarPush" type="button" class="primario">🔔 Ativar notificações</button>
         <button id="btnTestarPush" type="button" hidden>Enviar teste</button>
         <button id="btnDesativarPush" type="button" hidden>Desativar</button>
       </div>
-      <p class="dica">O PC avisa cada anúncio novo das cidades escolhidas (precisa do PC ligado com o Chrome aberto).</p>
-    </section>
+    </div>
 
+    <div class="titulo-secao">
+      <h3>Regras de aviso</h3>
+    </div>
+    <p id="regrasDica" class="dica"></p>
+    <div id="listaRegras" class="lista-regras"></div>
+
+    <div class="titulo-secao"><h3>Últimos avisos</h3></div>
+    <div id="listaAvisos" class="lista-avisos"></div>
+
+    <button id="btnNovaRegra" class="fab" type="button" title="Nova regra" aria-label="Nova regra">+</button>
+  </section>
+
+  <!-- ===== Favoritos ===== -->
+  <section id="telaFavoritos" class="tela" hidden>
+    <p id="resumoFav" class="resumo"></p>
+    <div id="listaFavoritos" class="grade"></div>
+    <div id="vazioFav" class="vazio" hidden>
+      <span class="grande">⭐</span><p>Nenhum favorito ainda.</p>
+      <p class="dica">Toque na ☆ de um anúncio para guardar aqui. Ele fica mesmo depois de sair do Marketplace.</p>
+    </div>
+  </section>
+
+  <!-- ===== Configurações ===== -->
+  <section id="telaConfig" class="tela pagina config" hidden>
     <section id="secGist" hidden>
       <h3>☁️ Gist do FB Radar</h3>
       <p class="dica">Por onde o PC manda os anúncios e os avisos para o celular. Cole um token do GitHub só com a
@@ -79,7 +100,7 @@
 
     <section id="secQr" hidden>
       <h3>📱 Configurar o celular</h3>
-      <p class="dica">No celular, abra o FB Radar → ⚙️ → <strong>Ler QR do PC</strong> e aponte para este código
+      <p class="dica">No celular, abra o FB Radar → Configurações → <strong>Ler QR do PC</strong> e aponte para este código
         (ou aponte a câmera do celular direto, para abrir já configurado).</p>
       <div class="botoes"><button id="btnMostrarQr" type="button">Mostrar QR code</button></div>
       <div id="qrCodigo" class="qr" hidden></div>
@@ -87,7 +108,7 @@
 
     <section id="secConectar" hidden>
       <h3>🔗 Conectar ao PC</h3>
-      <p class="dica">No PC, abra o FB Radar (localhost:5500/fb) → ⚙️ → <strong>Mostrar QR code</strong>.</p>
+      <p class="dica">No PC, abra o FB Radar (localhost:5500/fb) → Configurações → <strong>Mostrar QR code</strong>.</p>
       <div class="botoes"><button id="btnLerQr" type="button" class="primario">📷 Ler QR do PC</button></div>
       <div id="leitorQr" class="leitor" hidden>
         <video id="videoQr" playsinline muted></video>
@@ -102,12 +123,57 @@
         Facebook, e confere a categoria <em>Consoles de Video Game</em> a cada poucos minutos. Ligue pelo ícone dela (▶ Iniciar).</p>
       <p id="versao" class="dica"></p>
     </section>
+  </section>
+
+  <!-- ===== Menu inferior ===== -->
+  <nav class="abas" aria-label="Menu">
+    <button type="button" data-tela="anuncios" class="ativa"><span class="ic">🏷️</span>Anúncios</button>
+    <button type="button" data-tela="notificacoes"><span class="ic">🔔</span>Notificações</button>
+    <button type="button" data-tela="favoritos"><span class="ic">⭐</span>Favoritos</button>
+    <button type="button" data-tela="config"><span class="ic">⚙️</span>Configurações</button>
+  </nav>
+
+  <!-- ===== Editor de regra ===== -->
+  <dialog id="dlgRegra">
+    <form id="formRegra" class="form-regra" method="dialog">
+      <div class="dlg-topo">
+        <h2 id="tituloRegra">Nova regra</h2>
+        <button class="icone" value="cancelar" formnovalidate aria-label="Fechar">✕</button>
+      </div>
+      <label>Nome da regra
+        <input id="regraNome" type="text" maxlength="40" placeholder="Ex.: PS4 barato" required>
+      </label>
+      <label>Palavras no título <small>(separe por vírgula; basta uma)</small>
+        <input id="regraPalavras" type="text" placeholder="Ex.: ps4 slim, ps4 pro, playstation 4">
+      </label>
+      <label>Não pode ter <small>(separe por vírgula)</small>
+        <input id="regraExcluir" type="text" placeholder="Ex.: controle, defeito, peças">
+      </label>
+      <div class="linha-precos">
+        <label>Preço mínimo
+          <input id="regraPrecoMin" type="number" inputmode="numeric" min="0" step="1" placeholder="R$">
+        </label>
+        <label>Preço máximo
+          <input id="regraPrecoMax" type="number" inputmode="numeric" min="0" step="1" placeholder="R$">
+        </label>
+      </div>
+      <fieldset>
+        <legend>Localização <small>(nenhuma marcada = todas)</small></legend>
+        <div id="regraCidades" class="cidades-regra"></div>
+      </fieldset>
+      <label class="interruptor"><input id="regraAtiva" type="checkbox" checked> Regra ativa</label>
+      <p id="regraPrevia" class="previa"></p>
+      <div class="botoes">
+        <button id="btnSalvarRegra" type="submit" value="salvar" class="primario">Salvar regra</button>
+        <button id="btnExcluirRegra" type="button" class="perigo" hidden>Excluir</button>
+      </div>
+    </form>
   </dialog>
 
   <div id="toast" class="toast" role="status" hidden></div>
 
-  <script src="config.js?v=4"></script>
-  <script src="sync.js?v=4"></script>
-  <script src="app.js?v=4"></script>
+  <script src="config.js?v=5"></script>
+  <script src="sync.js?v=5"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>

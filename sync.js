@@ -81,5 +81,15 @@ const Sync = (() => {
     });
   }
 
-  return { config, setConfig, enabled, conectar, lerUm, atualizarInscricao };
+  // Grava um arquivo do Gist (regras.json: regras de aviso criadas na aba Notificações)
+  async function gravar(nome, valor) {
+    const { token, gistId } = config();
+    await request(`${API}/${gistId}`, {
+      token,
+      method: 'PATCH',
+      body: { files: { [nome]: { content: JSON.stringify(valor, null, 1) } } },
+    });
+  }
+
+  return { config, setConfig, enabled, conectar, lerUm, gravar, atualizarInscricao };
 })();

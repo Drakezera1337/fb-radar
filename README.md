@@ -25,7 +25,13 @@ este app em `/fb/`, recebe o coletor e publica no Gist do FB Radar.
 - **Gist**: no PC, ⚙️ → **Gist do FB Radar** → cole um token do GitHub só com a permissão `gist`
   ([gerar](https://github.com/settings/tokens/new?description=FB%20Radar%20(Gist)&scopes=gist)). O app acha ou cria
   o Gist "FB Radar" e passa ao `server.py`.
-- **Cidades**: ⚙️ no PC (vazio = todas as que o Facebook mostrar no raio da sua conta).
+- **Menu inferior**: Anúncios · Notificações · Favoritos · Configurações.
+- **Regras de aviso** (Notificações → **+**): nome, palavras no título (basta uma), palavras que não podem ter,
+  preço mínimo/máximo e cidades. Ficam em `regras.json` no Gist (PC e celular editam); o `server.py` só avisa os
+  anúncios novos que batem com alguma regra ativa — sem regras ativas, avisa todos. O editor mostra quantos anúncios
+  atuais batem. O histórico dos avisos enviados aparece na mesma aba.
+- **Favoritos**: ☆ guarda o anúncio (com uma cópia no aparelho: continua lá depois de sair do Marketplace, com o selo SAIU).
+- **Cidades**: Configurações no PC (vazio = todas as que o Facebook mostrar no raio da sua conta).
 - **Celular**: no PC, ⚙️ → **Mostrar QR code**; no celular, abra o FB Radar → ⚙️ → **Ler QR do PC** (ou aponte a
   câmera) e adicione à tela inicial. **🔔 Ativar notificações**: o PC avisa cada anúncio novo (com foto; tocar
   abre o anúncio). Inscrições em `push.json` no Gist.

@@ -14,6 +14,9 @@ const K = {
   chip: 'fbradar:chip',
   ordem: 'fbradar:ordem',
   push: 'fbradar:push',
+  tela: 'fbradar:tela',
+  favDados: 'fbradar:favDados', // cópia dos favoritos: continuam aparecendo depois que saem do Marketplace
+  regras: 'fbradar:regras',     // cópia local das regras (regras.json no Gist), para abrir sem internet
 };
 const ATUALIZAR_MS = NO_PC ? 20000 : 60000;
 
@@ -37,7 +40,9 @@ let erroCarga = '';
 let carregando = false;
 let chip = localStorage.getItem(K.chip) || 'todos';
 const favoritos = new Set(lerJSON(K.favoritos, []));
+const favDados = lerJSON(K.favDados, {});
 const ocultos = new Set(lerJSON(K.ocultos, []));
+let htmlFav = '';
 // Anúncios que chegaram depois da última visita ganham o selo NOVO
 const marcoNovo = Number(localStorage.getItem(K.visita)) || Date.now() - 3600000;
 
@@ -155,7 +160,6 @@ function filtrados(grupos) {
   const lista = grupos.filter((a) => {
     if (chip === 'ocultos') return a.oculto;
     if (a.oculto) return false;
-    if (chip === 'favoritos') return a.fav;
     if (chip !== 'todos' && !categoriasDe(a).includes(chip)) return false;
     const texto = semAcento(`${a.titulo} ${a.cidade}`);
     return termos.every((t) => texto.includes(t));
@@ -173,14 +177,13 @@ function renderChips(grupos) {
   const conta = (id) => todos.filter((a) => categoriasDe(a).includes(id)).length;
   const itens = [
     { id: 'todos', nome: 'Todos', n: todos.length },
-    { id: 'favoritos', nome: '⭐ Salvos', n: todos.filter((a) => a.fav).length },
     ...CATEGORIAS.map((c) => ({ id: c.id, nome: c.nome, n: conta(c.id) })),
   ];
   const nOcultos = grupos.filter((a) => a.oculto).length;
   if (nOcultos) itens.push({ id: 'ocultos', nome: '🙈 Ocultos', n: nOcultos });
   if (!itens.some((i) => i.id === chip)) chip = 'todos';
   const html = itens
-    .filter((i) => i.n || ['todos', 'favoritos'].includes(i.id) || i.id === chip)
+    .filter((i) => i.n || i.id === 'todos' || i.id === chip)
     .map((i) => `<button type="button" class="chip${i.id === chip ? ' ativo' : ''}" data-chip="${i.id}">${esc(i.nome)}<span>${i.n}</span></button>`)
     .join('');
   if ($('#chips').innerHTML !== html) $('#chips').innerHTML = html;
@@ -196,6 +199,7 @@ function cardHtml(a) {
     a.ids.length > 1 ? `<span class="selo" title="Postado ${a.ids.length} vezes">×${a.ids.length}</span>` : '',
     baixou ? `<span class="selo baixou">⬇ ${Math.round((1 - a.preco / a.precoAnterior) * 100)}%</span>` : '',
     a.vendido ? '<span class="selo">VENDIDO</span>' : a.reservado ? '<span class="selo">RESERVADO</span>' : '',
+    a.saiu ? '<span class="selo" title="Não aparece mais na categoria (vendido, apagado ou com mais de 7 dias)">SAIU</span>' : '',
   ].join('');
   const preco = a.preco ? (a.precoTexto || moeda(a.preco)) : 'Sem preço';
   const { fav, oculto } = a;
@@ -275,6 +279,10 @@ function render() {
     ? `${lista.length} de ${total} anúncios${novos ? ` · ${novos} novo${novos > 1 ? 's' : ''} desde a última visita` : ''} · ${cidades}`
     : '';
 
+  renderFavoritos(grupos);
+  renderAvisos();
+  if (telaAtual === 'notificacoes' && !$('#dlgRegra').open) renderRegras();
+
   const vazio = $('#vazio');
   vazio.hidden = lista.length > 0;
   if (!lista.length) {
@@ -304,20 +312,46 @@ $('#ordem').addEventListener('change', () => { localStorage.setItem(K.ordem, $('
 $('#btnAtualizar').addEventListener('click', () => carregar({ manual: true }));
 $('#status').addEventListener('click', () => carregar({ manual: true }));
 
-$('#lista').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-acao]');
+// ☆ e ✕ nos cards (Anúncios e Favoritos). Vale para o grupo todo (reposts);
+// um repost novo de um grupo oculto continua oculto.
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('.card [data-acao]');
   if (!b) return;
   e.preventDefault();
-  // Vale para o grupo todo (reposts); um repost novo de um grupo oculto continua oculto
   const ids = b.closest('.card').dataset.ids.split(',');
-  const conjunto = b.dataset.acao === 'favorito' ? favoritos : ocultos;
+  const favorito = b.dataset.acao === 'favorito';
+  const conjunto = favorito ? favoritos : ocultos;
   const marcar = !ids.some((id) => conjunto.has(id));
   ids.forEach((id) => (marcar ? conjunto.add(id) : conjunto.delete(id)));
-  gravarJSON(b.dataset.acao === 'favorito' ? K.favoritos : K.ocultos, [...conjunto]);
-  if (b.dataset.acao === 'ocultar' && marcar) toast('Anúncio oculto (veja em 🙈 Ocultos)');
+  gravarJSON(favorito ? K.favoritos : K.ocultos, [...conjunto]);
+  if (favorito) {
+    // Guarda uma cópia do anúncio: o favorito continua aqui mesmo depois de sair do Marketplace
+    const a = (dados?.anuncios || []).find((x) => ids.includes(x.id)) || favDados[ids[0]];
+    ids.forEach((id) => { if (marcar && a) favDados[id] = a; else delete favDados[id]; });
+    gravarJSON(K.favDados, favDados);
+    toast(marcar ? 'Guardado em ⭐ Favoritos' : 'Tirado dos favoritos');
+  } else if (marcar) {
+    toast('Anúncio oculto (veja em 🙈 Ocultos)');
+  }
   render();
 });
-$('#vazio').addEventListener('click', (e) => { if (e.target.id === 'btnConectarVazio') abrirConfig(); });
+$('#vazio').addEventListener('click', (e) => { if (e.target.id === 'btnConectarVazio') mostrarTela('config'); });
+
+// ---------- Favoritos ----------
+function renderFavoritos(grupos) {
+  const atuais = grupos.filter((g) => g.fav);
+  const presentes = new Set(atuais.flatMap((g) => g.ids));
+  // Favoritos que já não estão nos dados (saíram do Marketplace ou passaram de 7 dias): da cópia local
+  const guardados = [...favoritos].filter((id) => !presentes.has(id) && favDados[id])
+    .map((id) => ({ ...favDados[id], ids: [id], primeiroVisto: 0, fav: true, oculto: ocultos.has(id), saiu: true }));
+  const lista = [...atuais, ...guardados].sort((a, b) => (b.criadoEm || b.vistoEm) - (a.criadoEm || a.vistoEm));
+  const html = lista.map(cardHtml).join('');
+  if (html !== htmlFav) { $('#listaFavoritos').innerHTML = html; htmlFav = html; }
+  $('#vazioFav').hidden = lista.length > 0;
+  $('#resumoFav').textContent = lista.length
+    ? `${lista.length} favorito${lista.length > 1 ? 's' : ''}${guardados.length ? ` · ${guardados.length} já fora do Marketplace` : ''}`
+    : '';
+}
 
 // "Última visita": ao sair do app, o que já tinha chegado à tela deixa de ser NOVO na próxima vez
 function registrarVisita() {
@@ -333,21 +367,42 @@ window.addEventListener('pagehide', registrarVisita);
 setInterval(() => { if (!document.hidden) carregar(); }, ATUALIZAR_MS);
 setInterval(() => { if (!document.hidden) render(); }, 60000); // "há X min"
 
+// ---------- Telas (menu inferior) ----------
+const TELAS = {
+  anuncios: { el: '#telaAnuncios', titulo: 'FB Radar' },
+  notificacoes: { el: '#telaNotificacoes', titulo: 'Notificações' },
+  favoritos: { el: '#telaFavoritos', titulo: 'Favoritos' },
+  config: { el: '#telaConfig', titulo: 'Configurações' },
+};
+let telaAtual = 'anuncios';
+
+function mostrarTela(nome) {
+  if (!TELAS[nome]) nome = 'anuncios';
+  if (telaAtual === 'config' && nome !== 'config') { pararLeitorQr(); $('#qrCodigo').hidden = true; $('#qrCodigo').innerHTML = ''; }
+  telaAtual = nome;
+  for (const [id, t] of Object.entries(TELAS)) $(t.el).hidden = id !== nome;
+  document.querySelectorAll('.abas [data-tela]').forEach((b) => b.classList.toggle('ativa', b.dataset.tela === nome));
+  $('#tituloTela').textContent = TELAS[nome].titulo;
+  localStorage.setItem(K.tela, nome);
+  if (nome === 'config') prepararConfig();
+  if (nome === 'notificacoes') { renderNotif(); renderRegras(); carregarRegras(); }
+  window.scrollTo(0, 0);
+}
+document.querySelector('.abas').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-tela]');
+  if (b) mostrarTela(b.dataset.tela);
+});
+
 // ---------- Configurações ----------
-const dlg = $('#dlgConfig');
-function abrirConfig() {
+function prepararConfig() {
   $('#secCidades').hidden = !NO_PC;
   $('#secGist').hidden = !NO_PC;
   renderGist();
   $('#secQr').hidden = !NO_PC;
   $('#secConectar').hidden = NO_PC;
-  if (NO_PC) $('#cidades').value = (dados?.cidades || []).join('\n');
+  if (NO_PC && document.activeElement !== $('#cidades')) $('#cidades').value = (dados?.cidades || []).join('\n');
   $('#versao').textContent = `Versão ${typeof FB_VERSAO === 'number' ? FB_VERSAO : '?'}${NO_PC ? ' · no PC' : ''}`;
-  renderNotif();
-  dlg.showModal();
 }
-$('#btnConfig').addEventListener('click', abrirConfig);
-dlg.addEventListener('close', () => { pararLeitorQr(); $('#qrCodigo').hidden = true; $('#qrCodigo').innerHTML = ''; });
 
 $('#btnSalvarCidades').addEventListener('click', async () => {
   const cidades = $('#cidades').value.split('\n').map((c) => c.trim()).filter(Boolean);
@@ -519,7 +574,7 @@ function aplicarLinkConfig(texto) {
 }
 function configurarPorLink(texto) {
   if (!aplicarLinkConfig(texto)) return;
-  dlg.close();
+  mostrarTela('anuncios');
   carregar();
 }
 $('#linkConfig').addEventListener('change', (e) => { configurarPorLink(e.target.value); e.target.value = ''; });
@@ -575,6 +630,171 @@ $('#btnLerQr').addEventListener('click', async () => {
   }
 });
 
+// ---------- Regras de aviso (aba Notificações) ----------
+// Ficam em regras.json no Gist do FB Radar: o celular e o PC editam, o server.py lê a cada minuto e só
+// avisa os anúncios novos que batem com alguma regra ativa (sem regras ativas: avisa todos os novos).
+// { id, nome, ativo, palavras: [], excluir: [], precoMin, precoMax, cidades: [] }
+let regras = lerJSON(K.regras, []);
+let regraEditando = null;
+
+async function carregarRegras() {
+  if (!Sync.enabled()) return renderRegras();
+  try {
+    const lidas = await Sync.lerUm('regras.json', []);
+    regras = Array.isArray(lidas) ? lidas : [];
+    gravarJSON(K.regras, regras);
+  } catch (err) {
+    toast(`Não foi possível ler as regras: ${err.message}`);
+  }
+  renderRegras();
+}
+
+async function salvarRegras(novas, mensagem) {
+  if (!Sync.enabled()) {
+    return toast(NO_PC ? 'Conecte o Gist do FB Radar primeiro (Configurações)' : 'Conecte ao PC primeiro (Configurações → Ler QR do PC)');
+  }
+  try {
+    await Sync.gravar('regras.json', novas);
+    regras = novas;
+    gravarJSON(K.regras, regras);
+    toast(mensagem);
+  } catch (err) {
+    toast(`Não foi possível salvar: ${err.message}`);
+  }
+  renderRegras();
+}
+
+// Mesmo critério do server.py (casa_regra)
+function casaRegra(a, r) {
+  const titulo = semAcento(a.titulo);
+  const termos = (lista) => (lista || []).map(semAcento).map((t) => t.trim()).filter(Boolean);
+  const contem = (termo) => termo.split(/\s+/).every((w) => titulo.includes(w));
+  if (termos(r.palavras).length && !termos(r.palavras).some(contem)) return false;
+  if (termos(r.excluir).some(contem)) return false;
+  const preco = a.preco || 0;
+  if (r.precoMin && preco < r.precoMin) return false;
+  if (r.precoMax && (!preco || preco > r.precoMax)) return false;
+  const cidades = (r.cidades || []).map(semAcento);
+  return !cidades.length || cidades.includes(semAcento(a.cidade));
+}
+
+function resumoRegra(r) {
+  const partes = [];
+  if (r.palavras?.length) partes.push(r.palavras.join(', '));
+  if (r.excluir?.length) partes.push(`sem: ${r.excluir.join(', ')}`);
+  if (r.precoMin && r.precoMax) partes.push(`${moeda(r.precoMin)} a ${moeda(r.precoMax)}`);
+  else if (r.precoMax) partes.push(`até ${moeda(r.precoMax)}`);
+  else if (r.precoMin) partes.push(`a partir de ${moeda(r.precoMin)}`);
+  partes.push(r.cidades?.length ? r.cidades.join(', ') : 'todas as cidades');
+  return partes.join(' · ');
+}
+
+function renderRegras() {
+  const ativas = regras.filter((r) => r.ativo !== false).length;
+  $('#regrasDica').textContent = !regras.length
+    ? 'Sem regras: você é avisado de todo anúncio novo das suas cidades. Toque em + para avisar só do que interessa (nomes, preços, localização).'
+    : ativas
+      ? `Você só é avisado dos anúncios novos que batem com ${ativas > 1 ? `alguma das ${ativas} regras ativas` : 'a regra ativa'}.`
+      : 'Todas as regras estão desligadas: você é avisado de todo anúncio novo.';
+  const anuncios = dados?.anuncios || [];
+  $('#listaRegras').innerHTML = regras.map((r) => `
+    <div class="regra${r.ativo === false ? ' desligada' : ''}" data-regra="${esc(r.id)}">
+      <button type="button" class="regra-corpo" data-editar>
+        <strong>${esc(r.nome)}</strong>
+        <span>${esc(resumoRegra(r))}</span>
+        <small>${anuncios.filter((a) => casaRegra(a, r)).length} anúncio(s) atuais batem</small>
+      </button>
+      <label class="chave" title="Ligar/desligar"><input type="checkbox" data-alternar ${r.ativo === false ? '' : 'checked'}><span></span></label>
+    </div>`).join('');
+}
+
+function renderAvisos() {
+  const avisos = dados?.avisos || [];
+  const html = avisos.length
+    ? avisos.map((v) => `
+      <a class="aviso-item" href="https://www.facebook.com/marketplace/item/${esc(v.id)}/" target="_blank" rel="noopener">
+        ${v.foto ? `<img src="${esc(v.foto)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">` : '<span class="sem-foto-p">🎮</span>'}
+        <span class="aviso-texto">
+          <strong>${esc(v.precoTexto || 'Sem preço')} · ${esc(v.titulo)}</strong>
+          <small>${esc(tempoRelativo(v.em))} · ${esc(v.cidade)}${v.regra ? ` · <b>${esc(v.regra)}</b>` : ''}</small>
+        </span>
+      </a>`).join('')
+    : '<p class="dica">Nenhum aviso enviado ainda. Os próximos anúncios novos que baterem com as regras aparecem aqui.</p>';
+  if ($('#listaAvisos').innerHTML !== html) $('#listaAvisos').innerHTML = html;
+}
+
+const dlgRegra = $('#dlgRegra');
+const porVirgula = (texto) => texto.split(',').map((t) => t.trim()).filter(Boolean);
+
+function regraDoFormulario() {
+  const num = (sel) => Math.max(0, Number($(sel).value) || 0) || null;
+  return {
+    id: regraEditando?.id || `r${Date.now().toString(36)}`,
+    nome: $('#regraNome').value.trim(),
+    ativo: $('#regraAtiva').checked,
+    palavras: porVirgula($('#regraPalavras').value),
+    excluir: porVirgula($('#regraExcluir').value),
+    precoMin: num('#regraPrecoMin'),
+    precoMax: num('#regraPrecoMax'),
+    cidades: [...document.querySelectorAll('#regraCidades input:checked')].map((c) => c.value),
+  };
+}
+
+function atualizarPrevia() {
+  const r = regraDoFormulario();
+  const n = (dados?.anuncios || []).filter((a) => casaRegra(a, r)).length;
+  $('#regraPrevia').textContent = `${n} dos ${(dados?.anuncios || []).length} anúncios atuais batem com esta regra.`;
+}
+
+function abrirRegra(r) {
+  regraEditando = r || null;
+  $('#tituloRegra').textContent = r ? 'Editar regra' : 'Nova regra';
+  $('#regraNome').value = r?.nome || '';
+  $('#regraPalavras').value = (r?.palavras || []).join(', ');
+  $('#regraExcluir').value = (r?.excluir || []).join(', ');
+  $('#regraPrecoMin').value = r?.precoMin || '';
+  $('#regraPrecoMax').value = r?.precoMax || '';
+  $('#regraAtiva').checked = r ? r.ativo !== false : true;
+  // Cidades: as escolhidas no PC (mais alguma que a regra já tenha)
+  const cidades = [...new Set([...(dados?.cidades || []), ...(r?.cidades || [])])];
+  $('#regraCidades').innerHTML = cidades.length
+    ? cidades.map((c) => `<label><input type="checkbox" value="${esc(c)}" ${(r?.cidades || []).includes(c) ? 'checked' : ''}> ${esc(c)}</label>`).join('')
+    : '<p class="dica">Nenhuma cidade definida no PC (todas entram).</p>';
+  $('#btnExcluirRegra').hidden = !r;
+  atualizarPrevia();
+  dlgRegra.showModal();
+}
+
+$('#btnNovaRegra').addEventListener('click', () => abrirRegra(null));
+$('#formRegra').addEventListener('input', atualizarPrevia);
+$('#formRegra').addEventListener('submit', (e) => {
+  if (e.submitter?.value !== 'salvar') return;
+  const r = regraDoFormulario();
+  if (!r.palavras.length && !r.precoMin && !r.precoMax && !r.cidades.length) {
+    e.preventDefault();
+    return toast('Preencha ao menos uma condição: palavras, preço ou cidade');
+  }
+  const novas = regraEditando ? regras.map((x) => (x.id === r.id ? r : x)) : [...regras, r];
+  salvarRegras(novas, regraEditando ? 'Regra salva' : 'Regra criada — vale para os próximos anúncios novos');
+});
+$('#btnExcluirRegra').addEventListener('click', () => {
+  if (!regraEditando || !confirm(`Excluir a regra "${regraEditando.nome}"?`)) return;
+  dlgRegra.close();
+  salvarRegras(regras.filter((x) => x.id !== regraEditando.id), 'Regra excluída');
+});
+$('#listaRegras').addEventListener('click', (e) => {
+  const item = e.target.closest('[data-regra]');
+  if (!item) return;
+  const r = regras.find((x) => x.id === item.dataset.regra);
+  if (e.target.closest('[data-editar]')) abrirRegra(r);
+});
+$('#listaRegras').addEventListener('change', (e) => {
+  if (!e.target.matches('[data-alternar]')) return;
+  const id = e.target.closest('[data-regra]').dataset.regra;
+  const ligar = e.target.checked;
+  salvarRegras(regras.map((x) => (x.id === id ? { ...x, ativo: ligar } : x)), ligar ? 'Regra ligada' : 'Regra desligada');
+});
+
 // ---------- Toast ----------
 let toastTimer;
 function toast(msg) {
@@ -593,6 +813,7 @@ if (location.hash.startsWith('#config=')) {
 }
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 render();
+mostrarTela(localStorage.getItem(K.tela) || 'anuncios');
 carregar();
 
 // Zoom da página bloqueado no celular (pinça e dois toques não ampliam sem querer):
