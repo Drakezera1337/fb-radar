@@ -1,5 +1,5 @@
 // FB Radar: cache para abrir rápido/offline e notificações de anúncios novos (enviadas pelo server.py do PC).
-const CACHE = 'fbradar-v5';
+const CACHE = 'fbradar-v6';
 const ASSETS = ['./', 'index.html', 'styles.css', 'app.js', 'config.js', 'sync.js',
   'icon.svg', 'icon-192.png', 'badge-96.png', 'manifest.webmanifest'];
 
@@ -46,14 +46,19 @@ self.addEventListener('push', (e) => {
   }));
 });
 
+// Tocar na notificação de um anúncio abre o FB Radar com ?abrir=<id>: a página chama o app do
+// Facebook (fb://…) — a notificação só consegue abrir endereços https, que iriam para o navegador.
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
-  const destino = e.notification.data?.url || self.registration.scope;
+  const url = e.notification.data?.url || '';
+  const id = /\/marketplace\/item\/(\d+)/.exec(url)?.[1];
+  const destino = id ? `${self.registration.scope}?abrir=${id}` : self.registration.scope;
   e.waitUntil((async () => {
-    if (destino.startsWith(self.registration.scope)) {
-      const abertos = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-      const app = abertos.find((c) => c.url.startsWith(self.registration.scope));
-      if (app) return app.focus();
+    const abertos = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const app = abertos.find((c) => c.url.startsWith(self.registration.scope));
+    if (app) {
+      if (id) app.postMessage({ abrir: id });
+      return app.focus();
     }
     return self.clients.openWindow(destino);
   })());

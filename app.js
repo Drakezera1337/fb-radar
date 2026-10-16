@@ -805,7 +805,56 @@ function toast(msg) {
   toastTimer = setTimeout(() => { el.hidden = true; }, 3500);
 }
 
+// ---------- Abrir o anúncio no app do Facebook (vindo da notificação) ----------
+// iPhone: endereço fb:// (o app do Facebook abre direto no anúncio). Android: intent:// para o app do
+// Facebook, com o navegador como reserva. Se não abrir, o painel oferece as outras formas.
+const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+const ANDROID = /Android/.test(navigator.userAgent);
+const linksApp = (id) => {
+  const web = `https://www.facebook.com/marketplace/item/${id}/`;
+  return {
+    web,
+    app: ANDROID
+      ? `intent://www.facebook.com/marketplace/item/${id}/#Intent;scheme=https;package=com.facebook.katana;S.browser_fallback_url=${encodeURIComponent(web)};end`
+      : `fb://marketplace_product_details?id=${id}`,
+    alternativo: `fb://facewebmodal/f?href=${encodeURIComponent(web)}`,
+  };
+};
+
+function abrirNoFacebook(id) {
+  const a = (dados?.anuncios || []).find((x) => x.id === id) || (dados?.avisos || []).find((x) => x.id === id);
+  const l = linksApp(id);
+  let painel = $('#abrirApp');
+  if (!painel) {
+    painel = document.createElement('div');
+    painel.id = 'abrirApp';
+    painel.className = 'abrir-app';
+    document.body.appendChild(painel);
+    painel.addEventListener('click', (e) => { if (e.target === painel || e.target.closest('[data-fechar]')) painel.hidden = true; });
+  }
+  painel.innerHTML = `
+    <div class="abrir-app-caixa">
+      ${a?.foto ? `<img src="${esc(a.foto)}" alt="" referrerpolicy="no-referrer">` : ''}
+      <strong>${esc(a ? `${a.precoTexto || 'Sem preço'} · ${a.titulo}` : 'Anúncio do Marketplace')}</strong>
+      <a class="botao primario" href="${esc(l.app)}">Abrir no app do Facebook</a>
+      ${IOS ? `<a class="botao" href="${esc(l.alternativo)}">Não abriu? Tentar de outro jeito</a>` : ''}
+      <a class="botao" href="${esc(l.web)}" target="_blank" rel="noopener">Abrir no navegador</a>
+      <button type="button" class="botao" data-fechar>Fechar</button>
+    </div>`;
+  painel.hidden = false;
+  // Tenta abrir sozinho; se o app do Facebook abrir, o FB Radar vai para segundo plano e o painel some na volta
+  if (IOS || ANDROID) {
+    const sair = () => { if (document.hidden) { painel.hidden = true; document.removeEventListener('visibilitychange', sair); } };
+    document.addEventListener('visibilitychange', sair);
+    location.href = l.app;
+  }
+}
+
+navigator.serviceWorker?.addEventListener('message', (e) => { if (e.data?.abrir) abrirNoFacebook(String(e.data.abrir)); });
+
 // ---------- Início ----------
+const pedidoAbrir = new URLSearchParams(location.search).get('abrir');
+if (pedidoAbrir) history.replaceState(null, '', location.pathname + location.hash);
 if (location.hash.startsWith('#config=')) {
   const hash = location.hash;
   history.replaceState(null, '', location.pathname + location.search);
@@ -815,6 +864,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catc
 render();
 mostrarTela(localStorage.getItem(K.tela) || 'anuncios');
 carregar();
+if (/^\d{5,25}$/.test(pedidoAbrir || '')) abrirNoFacebook(pedidoAbrir);
 
 // Zoom da página bloqueado no celular (pinça e dois toques não ampliam sem querer):
 // - iPhone/Safari ignora o user-scalable=no e manda eventos "gesture*" na pinça;
